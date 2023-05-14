@@ -1,4 +1,4 @@
-#<group-id>,<protocol>,<from-port>,<to-port>,<CIDR|group-id>,<DESCRIPTION>
+#<group-id>,<protocol>,<from-port>,<to-port>,<CIDR|group-id>,<DESCRIPTION>,#memo
 #sg-nnnn,icmp,-1,-1,sg-nnnn,"ICMP"
 #sg-nnnn,-1,,,sg-nnnn,"all traffic"
 #sg-nnnn,udp,80,80,"0.0.0.0/0"
