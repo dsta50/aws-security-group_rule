@@ -1,6 +1,7 @@
 #!/bin/bash
 # Usage: 
-#   aws-security_group_rule.sh <add|del> <in|out> <rule_list(csv)> [-y]
+#   $0 <add|del> <in|out> <rule_list(csv)> [-y]
+#     $0:             Script file
 #     add/del:        Specify "add" to add rules or "del" to delete rules.
 #     in/out:         Inboud or Outbound
 #     rule_list(csv): The path to the CSV file containing the list of rules to add or delete.
@@ -39,10 +40,10 @@ fi
 # Set subcommand for inbaund/outband rule 
 case "${DIRECTION}" in
     in )
-        SUBCOM_TMP="ingress"
+        SUBCOM_TMP='ingress'
         ;;
     out )
-        SUBCOM_TMP="egress"
+        SUBCOM_TMP='egress'
         ;;
     * )
         echo -e "Error: Invalid argument: ${DIRECTION}"
@@ -80,6 +81,19 @@ function func_create_cmd() {
     DEST_SRC=$5
     DESCRIPTION=$6
     
+    # Set subcommand parameter: Port range
+    case "${PROTOCOL}" in
+        -1|all )
+             # '-1'/'all' for protocol means all traffic
+            SUMCMD_PRM_PORT1=''
+            SUMCMD_PRM_PORT2=''
+            ;;
+        * )
+            SUMCMD_PRM_PORT1=",FromPort=${FROM_PORT}"
+            SUMCMD_PRM_PORT2=",ToPort=${TO_PORT}"
+            ;;
+    esac
+    
     # Set subcommand parameter: Source/destination
     if [[ ${DEST_SRC} =~ sg-[[:alnum:]]+ ]]; then
         # SG-ID
@@ -96,21 +110,13 @@ function func_create_cmd() {
     fi
     
     # Set subcommand parameter: Description
-    if [[ ${DESCRIPTION} == "" ]]; then
-        SUBCMD_PRM3=''
-    else
-        SUBCMD_PRM3=",Description="${DESCRIPTION}""
-    fi
-    
-    # '-1' for protocol means all traffic, no need to specify port
-    if [[ ${PROTOCOL} =~ -1 ]]; then
-        SUBCOMD_TMP="${SUBCMD} --group-id ${SG_ID} --ip-permissions IpProtocol=${PROTOCOL},${SUBCMD_PRM1}='[{${SUBCMD_PRM2}=${DEST_SRC}"${SUBCMD_PRM3}"}]'"
-    else
-        SUBCOMD_TMP="${SUBCMD} --group-id ${SG_ID} --ip-permissions IpProtocol=${PROTOCOL},FromPort=${FROM_PORT},ToPort=${TO_PORT},${SUBCMD_PRM1}='[{${SUBCMD_PRM2}=${DEST_SRC}"${SUBCMD_PRM3}"}]'"
+    SUBCMD_PRM3=''
+    if [[ -n ${DESCRIPTION} && ! ${DESCRIPTION} =~ ^[\ ]+$ ]]; then
+        SUBCMD_PRM3=",Description=\""${DESCRIPTION}"\""
     fi
     
     # Assembling commands
-    CMD="${AWSCLI_CMD} ${SUBCOMD_TMP}"
+    CMD="${AWSCLI_CMD} ${SUBCMD} --group-id ${SG_ID} --ip-permissions IpProtocol=${PROTOCOL}${SUMCMD_PRM_PORT1}${SUMCMD_PRM_PORT2},${SUBCMD_PRM1}='[{${SUBCMD_PRM2}=${DEST_SRC}"${SUBCMD_PRM3}"}]'"
     
     return 0
 }
@@ -119,12 +125,13 @@ function func_create_cmd() {
 # Read and process rules from list file
 while IFS=',' read -r SG_ID PROTOCOL FROM_PORT TO_PORT DEST_SRC DESCRIPTION TEMP
 do
-    # Remove "(Double quotation) from field
-    SG_ID=$(echo "${SG_ID}" | sed 's/"//g')
-    PROTOCOL=$(echo "${PROTOCOL}" | sed 's/"//g')
-    FROM_PORT=$(echo "${FROM_PORT}" | sed 's/"//g')
-    TO_PORT=$(echo "${TO_PORT}" | sed 's/"//g')
-    DEST_SRC=$(echo "${DEST_SRC}" | sed 's/"//g')
+    # Remove "(Double quotation) and leading and trailing spaces from field
+    SG_ID=$(echo "${SG_ID}" | sed 's/"//g' | sed -e 's/^ //' -e 's/ $//')
+    PROTOCOL=$(echo "${PROTOCOL}" | sed 's/"//g' | sed -e 's/^ //' -e 's/ $//')
+    FROM_PORT=$(echo "${FROM_PORT}" | sed 's/"//g' | sed -e 's/^ //' -e 's/ $//')
+    TO_PORT=$(echo "${TO_PORT}" | sed 's/"//g' | sed -e 's/^ //' -e 's/ $//')
+    DEST_SRC=$(echo "${DEST_SRC}" | sed 's/"//g' | sed -e 's/^ //' -e 's/ $//')
+    DESCRIPTION=$(echo "${DESCRIPTION}" | sed 's/"//g')
 
     # Check field sg-id
     if [[ ! ${SG_ID} =~ sg-[[:alnum:]]+ ]]; then
@@ -132,6 +139,7 @@ do
         continue
     fi
     
+    # Check DESCRIPTION field
     if [[ ${DESCRIPTION} =~ \# ]]; then
         DESCRIPTION=''
     fi
